@@ -1,0 +1,456 @@
+---
+title: "Méthodologie - le test du Khi2, ses résidus et ses visualisations"
+author: "Rania El Fahli"
+date: "2023-05-02"
+output:
+  rmdformats::downcute
+---
+
+Cette fiche a été conçue durant mon stage de Master 2 Démographie (IDUS, UNISTRA) au sein de l'Observatoire Régional de la Santé Grand Est, encadré par Nadia Honoré (chargée d'études).
+
+Dans le cadre du projet Observatoire Local de Santé (Eurométropole de Strasbourg), un travail a été réalisé sur la santé de la mère et du nouveau-né à partir des certificats de santé au 8ème jour de la Protection Maternelle et Infantile entre 2010 et 2017. A la demande de la directrice Emilie Gardeur, nous avons exploré les visuels graphiques du type "corrélogramme" et la lecture des résidus du test du Khi-2. Les différentes méthodes de datavisualisation explorées sont regroupées ici.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(list(echo = T, include = T))
+```
+
+```{r include=FALSE}
+source("C:/Users/Userpcstr/Documents/prepa_pmi_me.R")
+```
+
+```{r include=FALSE}
+library(tidyverse) # pour le langage tidy utilisé
+library(corrgram) ; library(corrplot) ; library(ggcorrplot) # les différents packages permettant de produire des corrélogrammes 
+library(patchwork) # pour la mise en page des graphiques 
+library(ggplot2) # pour les graphiques ggplot
+
+
+```
+
+Nous allons revenir sur deux éléments statistiques :
+
+-   le test d'indépendance du Khi-2 afin d'en identifier les usages adéquats
+
+-   l'analyse des *résidus standardisés de Pearson* qui découle du test d'indépendance du Khi-2, permettant d'aller plus loin dans l'usage de ce test
+
+Mais également de présenter les différentes visualisations des *résidus standardisés de Pearson* et comment celles-ci peuvent faciliter leur interprétation. Les visualisations sont réalisées sur Rstudio et permettront de présenter les packages *corrgram* et *ggmosaic*.
+
+Pour les différents exemples de cette fiche nous utiliserons les données des certificats de santé de l'enfant au 8e jour (CS8) de la Protection Maternelle et Infantille au sein de l'Eurométropole de Strasbourg entre 2010 et 2017.
+
+## *I. Le test d'indépendance du Khi-2 et quand l'utiliser*
+
+Il s'agira dans cette fiche de revoir le test d'indépendance Khi-2, ou Tests de Pearson. Le Khi-2 peut également faire référence au test de conformité (comparaison d'une distribution observée sur un échantillon à une distribution connue dans une population ou théorique) ou au test du Khi-2 à 4 cases (pour la comparaison de deux pourcentages observés sur deux échantillons dans un tableau de contingence) que nous ne verrons pas ici.
+
+Tous les différents tests du Khi-2 permettent de comparer des répartitions d'effectifs à une valeur théorique attendue (test de conformité) ou de déterminer si ces répartitions dépendent seulement du hasard (tests d'homogénéité et d'indépendance). Les tests du Khi-2 ont l'avantage de pouvoir étudier les variables qualitatives binaires ou nominales (la variable contient plus de 2 catégories non ordonnées) à partir de leurs effectifs ou pourcentages.
+
+Le test d'indépendance du Khi-2 permet de savoir si les lignes et colonnes d'un tableau croisé sont indépendantes. Le fait d'appartenir à une modalité de la première variable n'a pas d'influence sur la modalité d'appartenance de la deuxième variable. Autrement dit, les pourcentages en ligne sont les mêmes pour toutes les lignes et il en est de même pour les pourcentages en colonne du tableau croisé. Cela revient à tester l'hypothèse nulle H0 suivante :
+
+-   L'hypothèse nulle (H0) est : *le fait de connaître l'appartenance d'un individu à une population (selon un critère) ne donne aucun indice sur la caractéristique qui le défini selon l'autre critère.*
+
+Le calcul de l'indépendance passe par le calcul d'effectifs théoriques : c'est la répartition qui serait obtenue si les deux variables étaient strictement indépendantes. Pour tester l'hypothèse H0 citée, le test du Khi-2 vient dès lors comparer au sein de chaque case du tableau, les effectifs observés et théoriques. Les écarts entre les effectifs observés et théoriques sont nommés *résidus.*
+
+```{r Exemple utilisation du test du Khi-2 sur R, echo=TRUE}
+
+
+  # Je crée un tableau de contingence reproduisant la répartition des effectifs selon les deux variables d'intérêt (zone de résidence et recours à l'entretien prénatal). 
+
+tab <- xtabs(~ com_couronne + Entretien, data = pmi)
+lprop(tab) # pourcentages en ligne
+chisq.test(tab) # fonction qui permet d'exécuter le test du Khi-2 sur R
+
+
+```
+
+-   Résultats
+
+    -   Le X-2 donne la probabilité de validation de H0 ou l'écart entre la répartition observée et celle attendue si l'indépendance entre les lignes et les colonnes était effective.
+
+    -   La p-value est la probabilité p que les colonnes et lignes soient indépendantes, autrement dit "le nombre de chances que j'ai de me tromper si j'affirme que les deux variables croisées ne sont pas indépendantes" (cf. cours de Julien Barnier, 2016). Par convention, le seuil de significativité est de 5%.
+
+    -   df ou degré de liberté : il s'agit du (nombre de lignes - 1) x (nombre de colonnes - 1) du tableau croisé.
+
+On pourrait conclure dans le cas du test réalisé entre le recours aux séances de préparation à la parentalité (PNP) et la zone de résidence de la mère, que les résultats nous permettent de rejeter l'hypothèse d'indépendance puisque la p-value est bien inférieure à 0.05 (p-value \< 2.2e-16). La zone de résidence de la mère aurait dès lors une influence sur le recours aux séances de PNP pendant la grossesse entre 2010 et 2017.
+
+### *Point de vigilance : le test du Khi-2 n'est pas une mesure de l'intensité de la dépendance*
+
+Comme expliqué plus haut, le test d'indépendance du Khi-2 vient juste tester l'hypothèse H0 d'indépendance. Nous ne sommes pas dans une mesure de corrélation ni d'intensité de la dépendance.
+
+Pour affiner ce test, nous pouvons par la suite utiliser un test de Cramer's V qui calcule un *coefficient de contigence* :
+
+![](PMI/Captureè.PNG){width="443" height="64"}
+
+^*(cf. cours de Julien Barnier p35., 2016)*^
+
+```{r}
+rcompanion::cramerV(pmi$nb_echo_total, pmi$com_couronne)
+```
+
+Pour résumer, plus le V est élevé plus la dépendance est forte entre les deux variables et inversement. L'intérêt du V de Cramer c'est qu'il prend en compte le biais induit par la taille de l'échantillon car il ne dépend pas des effectifs du tableau.
+
+Ici entre le nombre d'échographies réalisées et la zone de résidence de la mère, la valeur est proche de 0 ce qui indiquerait une indépendance entre les deux variables, à l'inverse de ce que nous indiquait le test du Khi-2. C'est en fait pas très étonnant en raison de la taille de "l'échantillon" des certificats de santé au 8eme jour (n = 46133) , ce qui nous amène au point suivant.
+
+### *Point de vigilance : la sensibilité du Khi-2 à la taille des échantillons :*
+
+Le test du Khi-2 est sensible à la taille des échantillons et aux effectifs du tableau de contigence. Plus les effectifs sont élevés, plus il trouvera d'écart entre les effectifs attendus et observés au sein des cellules. Ainsi, il sera quasi systématiquement significatif car le nombre de chances de se tromper en rejetant l'hypothèse d'indépendance, se réduit fortement. La p-value n'est pas fausse, mais le test du Khi-2 n'est plus une mesure très indicative de la relation entre deux variables lorsque l'échantillon est très vaste ou lorsqu'il est quasi exhasutif comme il est le cas ici où presque 90% des grossesses de femmes résidant au sein de l'Eurométropole de Strasbourg entre 2010 et 2017 sont couvertes dans notre base.
+
+Cette question prête à de nombreux débats, on peut en retrouver un résumé dans cet article de Lin et al, 2013 "*Too big to fail : large samples and the p-value problem*" : <https://www.jstor.org/stable/24700283>
+
+## *II. L'analyse des résidus standardisés de Pearson*
+
+Les résidus sont les écarts entre l'attendu et l'observé au sein de chaque case du tableau de contingence. Les résidus de Pearson calculés ainsi :
+
+![](PMI/Capture.PNG){width="330"}
+
+^*(cf. cours de Julien Barnier p26., 2016)*^
+
+permettent d'affiner et de simplifier l'interprétation du test du Khi-2 à l'échelle d'une cellule du tableau. L'interprétation peut dès lors être :
+
+-   **le résidu est positif** : les effectifs sont supéreurs aux effectifs théoriques sous l'hypothèse d'indépendance entre lignes et colonnes du tableau. **L'écart est donc significatif.**
+
+-   **le résidu est négatif** : les effectifs sont inférieurs aux effectifs théoriques sous l'hypothèse d'indépendance entre lignes et colonnes du tableau. **L'écart n'est pas significatif.**
+
+Comme le résume bien Julien Barnier, "***Les résidus permettent « d'orienter le regard » vers les cases où les écarts sont statistiquement significatifs***" (p.27). Rappelons-nous, nous ne sommes pas dans une mesure de corrélation ou d'intensité. Les résidus permettent simplement d'identifier les cellules du tableau qui ont le plus contribué à la valeur significative du Khi-2. Les cellules où les écarts sont les plus importants.
+
+En dehors des tests du Khi-2 et de ses résidus, toujours vérifier la simple répartition des effectifs au sein du tableau de contingence pour vérifier la cohérence des résultats.
+
+## *Les visualisations des résidus :*
+
+***Exemple : Test d'indépendance du khi-2 entre le nombre d'échographies réalisées pendant la grossesse et la zone de résidence de la mère***
+
+*Etape de préparation de la donnée :*
+
+On calcule dans un premier temps les résidus de Pearson de notre test du Khi-2 entre le nombre d'échographies (en 3 modalités) et la zone de résidence de la mère. On produit le test par la fonction chisq.test() et on stocke les résultats dans un objet ici nommé "pv" qui contient entres autres les résidus dans une variable "residuals"
+
+On récupère cette variable (pv\$residuals) et on stocke les résidus dans un objet nommé ici *residus.*
+
+C'est l'objet *residus* que je vais utiliser pour créer les corrélogrammes.
+
+*Optionnel* : je pourrais arrondir les valeurs de la sorte *residus \<- round(pv\$residuals)*
+
+```{r echo=TRUE}
+pmi_b <- pmi %>%
+  filter(nb_echo_total != "NR")
+
+pv <- chisq.test(pmi_b$com_couronne, pmi_b$nb_echo_total) # p-value = 0.0004855 df = 4 
+residus <- pv$residuals
+
+head(residus) # il contient les résidus correspondant au croisement de chaque modalité des 2 variables 
+```
+
+#### *{corrplot} package :*
+
+```{r echo=TRUE}
+# Je crée en amont ma palette de couleurs que je pourrai ensuite appeler dans
+# l'argument col = de la fonction corrplot. 
+
+col <- colorRampPalette(c("#2a4980", "#80d2e0", "#d7d7d7", "#f99e60", "#b34c1c")) 
+
+corrplot::corrplot(residus, is.corr = F,  method="color", col=col(200),  
+                   addCoef.col = "black", # Ajout du coefficient de corrélation
+                   tl.col="black", tl.srt=45, 
+                   sig.level = 0.01
+)
+```
+
+***Lecture des résultats chiffrés :*** Avec une p-value 0.0004855, nous pouvons rejeter l'hypothèse d'indépendance entre le nombre d'échographies réalisées durant la grossesse et la zone de résidence de la mère. Le croisement entre les modalités moins de 3 échographies et Strasbourg, et plus de 5 échographies et Strasbourg montrent les écarts les plus importants entre les effectifs observés et les effectifs théoriques.
+
+***Commentaire des résultats :*** La zone de résidence de la mère semble avoir une influence sur le nombre d'échographies réalisées durant la grossesse entre 2010 et 2017, notamment le fait de résider au sein de la ville de Strasbourg. En effet, les grossesses de femmes résidant au sein de la ville de Strasbourg semblent associées au fait de réaliser moins de 3 échographies ou plus de 5 échographies, ce qui révèle l'hétérogénéité des caractéristiques prénatales au sein de la ville.
+
+Je peux enlever les cases où les résidus sont égaux à 0 en modifiant les argument order et type
+
+```{r echo=TRUE}
+corrplot::corrplot(residus, is.corr = F,  method="color", col=col(200),  
+         type="upper", order="hclust", # tourné vers le haut par l'argument type = et clusté par l'argument order = "hclust"
+         addCoef.col = "black", # Ajout du coefficient de corrélation
+         tl.col="black", tl.srt=45, 
+         sig.level = 0.01, insig = "blank")
+
+```
+
+```{r echo=T}
+
+corrplot::corrplot(residus, is.corr = F,  method="number", col=col(200),  
+                   addCoef.col = "black", # Ajout du coefficient de corrélation
+                   tl.col="black", tl.srt=45, #Rotation des etiquettes de textes
+                   sig.level = 0.01
+)
+```
+
+```{r echo=T}
+# sans l'affichage des coefficients de pondération, juste la relation par la couleur en modifiant l'argument method = 
+
+corrplot::corrplot(residus, is.corr = F,  method="color", col=col(200),  
+                   tl.col="black", tl.srt=45, 
+                   sig.level = 0.01 
+)
+```
+
+Une autre possibilité qui donne le même visuel serait de produire une mosaïque toujours en utilisant les résidus du test du Khi-2. Une mosaïque peut être faite avec ggplot2 par la fonction *geom_tile()* ce qui a pour intérêt d'en faire un objet ggplot2 et donc de le modifier à souhait (couleurs, textes, titres, axes...) à l'aide des différentes fonctions d package.
+
+*Etape de préparation de la donnée :*
+
+On procède de la même manière, on adapte juste le format au langage ggplot en passant d'un objet table à dataframe
+
+```{r echo=T}
+pv <- chisq.test(pmi_b$com_couronne, pmi_b$nb_echo_total) # p-value = 0.0004855 df = 4
+
+residus <- round(pv$residuals)
+
+residus <- as.data.frame(residus) # ggplot ne fonctionne pas avec un objet R "table", on le modifie en dataframe. 
+
+
+```
+
+On ajoute les noms des axes, les titres et le titre de la légende par la fonction labs() et on crée le gradient de couleurs par la fonction scale_fill_steps2() où on précise les couleurs des valeurs faibles, moyennes, hautes.
+
+Je peux également modifier les niveaux de séparation par l'argument breaks = . On peut modifier également la couleur des bordures par l'argument color = au sein de la fonction geom_tile, je les ai ici mis en blanc.
+
+*Optionnel* : je change l'esthétique générale du graphique en appliquant le theme "tufte" qui est un thème préparé et disponible au sein de la librairie ggthemes.
+
+```{r  echo=TRUE}
+residus %>%
+  ggplot(aes(`pmi_b.com_couronne`, `pmi_b.nb_echo_total`, fill = Freq)) +
+  geom_tile(color = "white") +
+  labs(
+    x = "Zone de résidence de la mère", 
+    y = "Nombre d'échographies", 
+    fill = "Résidus de Pearson", 
+    title = "Nombre d'échographies selon la zone de résidence de la mère", 
+    subtitle = "Grossesses au sein de l'Eurométropole de Strasbourg entre 2010 et 2017", 
+    caption = "Source : CS8 PMI 2010-2017, Exploitations ORS Grand Est"
+  ) +
+  ggthemes::theme_tufte() +
+  scale_fill_steps2(low = "#2a4980", mid = "white", high = "#f99e60", midpoint =0)
+```
+
+Je peux ajouter les valeurs par la fonction geom_text()
+
+```{r echo =T}
+residus %>%
+  ggplot(aes(`pmi_b.com_couronne`, `pmi_b.nb_echo_total`, fill = Freq)) +
+  geom_tile(color = "white") +
+  labs(
+    x = "Zone de résidence de la mère", 
+    y = "Nombre d'échographies", 
+    fill = "Résidus de Pearson", 
+    title = "Nombre d'échographies selon la zone de résidence de la mère", 
+    subtitle = "Grossesses au sein de l'Eurométropole de Strasbourg entre 2010 et 2017", 
+    caption = "Source : CS8 PMI 2010-2017, Exploitations ORS Grand Est"
+  ) +
+  ggthemes::theme_tufte() +
+  scale_fill_steps2(low = "#2a4980", mid = "white", high = "#f99e60", midpoint =0) +
+  geom_text(aes(label = Freq))
+```
+
+## *Autres corrélogrammes :*
+
+Un corrélogramme est un visuel, il n'est dès lors pas propre aux résidus de Pearson. Il peut être utilisé pour observer la corrélation entre deux ou plusieurs variables numériques.
+
+La matrice de corrélation indique les valeurs de corrélation qui correspondent à la relation linéaire entre chaque paire de variables numériques (cela reviendrait à réaliser une régression linéaire simple entre chaque variable).
+
+***Exemple : Visualisations de la matrice de corrélation entre plusieurs variables numériques de la base PMI***
+
+*J'ai sélectionné les variables que je souhaite intégrer dans ma matrice de corrélation. Je renomme mes variables pour améliorer le visuel.*
+
+```{r echo =T}
+
+pmi_cor <- pmi %>%
+  select(age_ddm, poids_re, taille_re_c, `Nombre d'echographies`,`Nb cigarettes par jour`,
+         Parite, Gestite,`Nb verres d'alcool par semaine` )
+
+pmi_cor <- pmi_cor %>%
+  rename(
+    "Age de la mère" = age_ddm, 
+    "Poids à la naissance" = poids_re, 
+    "Taille à la naissance" = taille_re_c, 
+    "Nombre de cigarettes/jour" = `Nb cigarettes par jour`, 
+    "Parité" = Parite, 
+    "Gestité" = Gestite, 
+    "Nombre de verres d'alcool/semaine" = `Nb verres d'alcool par semaine` 
+  )
+
+```
+
+*Je calcule les coefficients de corrélation par la fonction "cor".*
+
+*Par l'argument use = "complete.obs" j'ai retiré les réponses manquantes (valeurs NA).*
+
+*L'objet "coef_cor" est la table contenant tous les coefficients de corrélation entre mes variables numériques. C'est l'objet que je vais appeler par la suite pour la visualisation.*
+
+```{r echo=T}
+
+coef_cor <- round(cor(pmi_cor, use = "complete.obs"),1) 
+
+head(coef_cor) 
+
+```
+
+Avec notre objet coef_cor on peut produire un corrélogramme comme celui-ci :
+
+#### *{ggcorrplot} package :*
+
+^*Ici on est sur un package qui se base sur le langage de ggplot donc on peut utiliser toutes les fonctions d'esthétique et de mise en forme de ggplot2.*^
+
+*petit détail :* en ajoutant le thème du graphique, il est indiqué par défaut "Var1" et "Var2" sur les axes y et x, pour les enlever j'indique dans la fonction labs() de ne rien mettre aux axes par un vide de la sorte " " . Je change également le sens des labels de l'axe x pour qu'ils soient plus lisibles par cette fonction ggplot2 :
+
+*theme(axis.text.x = element_text(angle = 90))*.
+
+Je peux modifier l'angle par l'argument angle = .
+
+```{r echo =T}
+ggcorrplot(coef_cor, # mon objet
+           method = "circle", # afficher des cercles
+           type = "lower", # le sens du graphique
+           outline.color = "black", # la couleur des bordures
+            legend.title = "Corrélation", # le titre de la légende
+             colors =  c("#2a4980",  "white", "#f99e60")) + # les couleurs
+  labs(title = "Mensurations à la naissance et caractéristiques prénatales", 
+  subtitle = "Ensemble de l'Eurométropole de Strasbourg entre 2010 et 2017", 
+  caption =  "Source : CS8 PMI 2010-2017, Exploitations ORS Grand Est", 
+  x = " ", 
+  y = " "
+  ) + 
+  ggthemes::theme_tufte() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+[***Lecture :***]{.underline} ***Plus le coefficient de corrélation est proche de 1 (orange),** plus la corrélation entre les deux facteurs est elevée, **plus elle est proche de -1 (bleu), plus la corrélation est faible**. Si le coefficient est de 0, on note une absence de corrélation. Le corrélogramme permet de visualiser la matrice et de représenter la corrélation par un gradient de couleur.*
+
+On peut modifier le format, passer du cercle au carré en retirant l'argument method = "circle".
+
+```{r echo=T}
+
+ggcorrplot(coef_cor, # mon objet
+           type = "lower",# le sens du graphique
+           outline.color = "black", # la couleur des bordures
+            legend.title = "Corrélation", # le titre de la légende
+             colors =  c("#2a4980",  "white", "#f99e60")) + # les couleurs
+  labs(title = "Mensurations à la naissance et caractéristiques prénatales", 
+  subtitle = "Ensemble de l'Eurométropole de Strasbourg entre 2010 et 2017", 
+  caption =  "Source : CS8 PMI 2010-2017, Exploitations ORS Grand Est", 
+  x = " ", 
+  y = " "
+  ) + 
+  ggthemes::theme_tufte() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+Ou bien changer le sens du graphique par l'argument type = "lower" ou "upper" et ajouter les valeurs par l'argument lab = T au sein de la fonction ggcorrplot, modifier la couleur des bordures par outline.color =
+
+```{r echo=T}
+ggcorrplot(coef_cor, # mon objet
+           type = "upper", # le sens du graphique
+           outline.color = "grey",
+           lab_size = 3, # la taille des valeurs affichées
+          legend.title = "Corrélation", # le titre de la légende
+          colors =  c("#2a4980",  "white", "#f99e60"), # les couleurs
+          lab = T) + # afficher les valeurs
+  labs(title = "Mensurations à la naissance et caractéristiques prénatales", 
+  subtitle = "Ensemble de l'Eurométropole de Strasbourg entre 2010 et 2017", 
+  caption =  "Source : CS8 PMI 2010-2017, Exploitations ORS Grand Est", 
+  x = " ", 
+  y = " "
+  ) + 
+  ggthemes::theme_tufte() +
+  theme(axis.text.x = element_text(angle = 90)) 
+```
+
+Ou bien conserver l'intégralité de la matrice, mais cela comprend également les coefficients correspondant aux croisement entre une même variable (donc = 1), ce qui n'est pas très utile
+
+```{r echo=T}
+ggcorrplot(coef_cor, # mon objet
+           outline.color = "black", # la couleur des bordures
+            legend.title = "Corrélation", # le titre de la légende
+             colors =  c("#2a4980",  "white", "#f99e60")) + # les couleurs
+  labs(title = "Mensurations à la naissance et caractéristiques prénatales", 
+  subtitle = "Ensemble de l'Eurométropole de Strasbourg entre 2010 et 2017", 
+  caption =  "Source : CS8 PMI 2010-2017, Exploitations ORS Grand Est", 
+  x = " ", 
+  y = " "
+  ) + 
+  ggthemes::theme_tufte() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+#### *{ggstatsplot} package :*
+
+^*ggstatsplot "Based Plots with Statistical Details" est un package très intéressant pour la production de plusieurs graphiques*^
+
+^*avec des ttests statistiques intégrés dans la fonction du graphique comme pour les corrélogrammes.*^
+
+^*Il faut néanmoins vérifier en amont quel est le test produit pour être sûr de préciser le bon en argument & qu'il est adéquat à nos variables.*^
+
+^*Plus d'infos ici :*<https://indrajeetpatil.github.io/ggstatsplot/>^
+
+Ici, nous n'avons pas à créer un objet contenant les coefficients de corrélation en amont du graphique, **c'est la fonction qui les calcule pour** **nous.** Il faut **préciser quelle méthode de calcul est souhaitée par l'argument type = où il faut préciser "parametric"** pour les coefficients de corrélation de Pearson et "non-parametric" pour ceux de Spearman.
+
+```{r echo=T}
+
+ggstatsplot::ggcorrmat(
+  data = pmi_cor,
+  type = "parametric", 
+  colors = c("#2a4980",  "white", "#f99e60")) +
+  labs(
+  title = "Mensurations à la naissance et caractéristiques prénatales", 
+  subtitle = "Ensemble de l'Eurométropole de Strasbourg entre 2010 et 2017", 
+  caption =  "Source : CS8 PMI 2010-2017, Exploitations ORS Grand Est",
+   x = " ", 
+  y = " ") + 
+  ggthemes::theme_tufte() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+Ou encore, des matrices de corrélation dans le cas par exemple de **variables catégorielles :**
+
+La corrélation entre les deux variables est calculée à partir d'une matrice modèle où chaque catégorie est transformée en une variable muette (*dummy variable*) prenant la valeur de 0 ou 1 indiquant l'absence ou la présence d'un effet catégoriel susceptible de modifier le résultat. La matrice modèle permet dès lors de calculer des coefficients de corrélation de Pearson entre chacun des facteurs des deux variables. La matrice est visualisée par un corrélogramme représentant chacun des croisements (chaque modalité des variables) et un gradient de couleur permet d'indiquer la présence ou non de corrélation, et son intensité.
+
+Ici on retourne au package ***ggcorrplot.***
+
+Par la fonction ***model.matrix(),*** j'obtiens ma matrice de variables muettes, par la fonction ***cor()*** j'obtiens les coefficients de corrélation, puis je reproduis le graphique de la même manière que pour les variables numériques avec la fonction ggcorrplot() du package qui porte le même nom.
+
+```{r echo=T}
+data_mat_cspa <- pmi %>%
+  select(cspa, Entretien )
+
+data_mat_cspa <- data_mat_cspa %>%
+  rename( "PNP" = "Entretien")
+
+model.matrix(~0+., data=data_mat_cspa) %>% 
+  cor(method = "pearson") %>% 
+  ggcorrplot(hc.order = T, 
+             show.diag = F,
+             type="lower", 
+             lab=F, 
+             lab_size=2, 
+             outline.color = "grey",
+             colors =  c("#2a4980",  "white", "#f99e60"),
+             legend.title = "Corrélation") +
+   labs(x = " ", 
+       y = " ",
+       title = "Corrélation entre la catégorie socio-professionnelle active \n de la mère  et le recours à la PNP",
+       subtitle = "Ensemble Eurométropole de Strasbourg entre 2010 et 2017, (n = 16 648)", 
+        caption =  "Source : CS8 PMI 2010-2017, Exploitations ORS Grand Est"
+       ) +
+  ggthemes::theme_tufte() +
+  theme(axis.text.x = element_text(angle = 90))
+
+
+```
+
+## *Ressources et documentation :*
+
+-   Aide à l'utilisation de R : Test du X2 en langage R <https://sites.google.com/site/rgraphiques/4–stat/comparer-et-%C3%A9tudier-des-effectifs-et-proportions-en-langage-r/test-du-ch2-khi2>
+
+-   Cette fiche sur les corrélogrammes sur Rpubs (en anglais) mais où l'on peut piocher plusieurs lignes de codes : <https://rpubs.com/Alema/1000474>
+
+-   "Tout ce que vous n'avez jamais voulu savoir sur le X2 sans jamais avoir eu envie de le demander" Cours de Julien Barnier, CNRS Centre Max Weber 5 avril 2016 <https://raw.githubusercontent.com/juba/archive_doc_khi2/master/khi2.pdf>
+
+-   Statistique épidémiologie, T. Ancelle 3e Edition
+
+-   Documentation ggstatsplot : <https://indrajeetpatil.github.io/ggstatsplot/>
+
+-   Documentation ggcorrplot :<https://cran.r-project.org/web/packages/ggcorrplot/readme/README.html>
+
+-   Documentation corrplot : <https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html>
+
+![](PMI/ors_logo.PNG){width="321"}
